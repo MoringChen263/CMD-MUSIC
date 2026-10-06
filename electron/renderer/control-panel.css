@@ -1,0 +1,29 @@
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: #0000aa; font-family: "Consolas","Courier New",monospace; }
+.cp {
+  background: rgba(0,0,40,.97);
+  color: #e8e8e8;
+  border: 2px solid #c0c0c0;
+  box-shadow: inset -2px -2px 0 #808080, inset 2px 2px 0 #fff, 0 10px 30px rgba(0,0,0,.6);
+  height: 100%;
+  display: flex; flex-direction: column; padding: 10px; gap: 10px;
+}
+.cp-h { color: #66ccff; letter-spacing: 1px; display: flex; justify-content: space-between; align-items: center;
+  border-bottom: 1px solid #9a9ad6; padding-bottom: 5px; }
+.cp-h .x { cursor: pointer; color: #9a9ad6; }
+.cp-now { font-size: 13px; }
+.cp-now b { color: #fff; }
+.dim { color: #9a9ad6; }
+.cp-row { display: flex; gap: 6px; }
+.cp-row button {
+  font-family: inherit; background: rgba(40,40,90,.9); color: #cfe;
+  border: 1px solid #9a9ad6; padding: 5px 10px; cursor: pointer; font-size: 12px;
+}
+.cp-row button:hover { border-color: #66ccff; }
+.cp-cmd { display: flex; align-items: center; gap: 6px; }
+.prompt { color: #33ff66; font-size: 13px; white-space: nowrap; }
+#cpInput {
+  flex: 1; background: transparent; border: none; outline: none; color: #fff;
+  font-family: inherit; font-size: 13px; caret-color: #33ff66;
+}
+.cp-hint { font-size: 11px; line-height: 1.5; }

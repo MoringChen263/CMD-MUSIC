@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'" />
+<title>CMD-MUSIC // 仿 CMD 风格音乐播放器</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<!-- 仿 CMD 窗口（窗口态有边框/标题栏；壁纸态去边框铺满，并下沉到桌面背景层） -->
+<div class="stage" id="stage">
+  <!-- 标题栏（窗口模式显示，壁纸模式隐藏） -->
+  <div class="titlebar" id="titlebar">
+    <div class="tb-title">C:\WINDOWS\system32\cmd.exe &mdash; CMD-MUSIC</div>
+    <div class="tb-btns">
+      <span class="tb-btn" id="btnMin" title="最小化">_</span>
+      <span class="tb-btn" id="btnMax" title="最大化">&#9633;</span>
+      <span class="tb-btn" id="btnClose" title="关闭（隐藏到托盘）">&#10005;</span>
+    </div>
+  </div>
+
+  <!-- 屏幕主区 -->
+  <div class="screen" id="screen">
+    <!-- 顶部 Header -->
+    <div class="header">
+      <div class="h-brand">CMD-MUSIC <span class="dim">// terminal audio player</span></div>
+      <div class="h-stats">
+        <span>FPS <b id="statFps">--</b></span>
+        <span>CPU <b id="statCpu">--</b>%</span>
+        <span>GPU <b id="statGpu" title="本应用占用的 GPU（3D 引擎），来自 Windows 性能计数器">--</b>%</span>
+        <span>RAM <b id="statRam">--</b>%</span>
+      </div>
+      <!-- 原来的 <span class="h-gear" id="btnSet">⚙</span> 已删除。
+           它在壁纸态是个死控件：挂进 WorkerW 的窗口收不到鼠标消息
+           （SysListView32 铺满全屏且 z 序在 WorkerW 之上，192 点命中网格
+           实测命中我方窗口 0 个，mousemove 连续 110s 恒为 0）。
+           设置入口迁到系统托盘右键菜单 →「⚙ 设置…」。 -->
+    </div>
+
+    <!-- 主工作区 -->
+    <div class="main">
+      <!-- 左列 -->
+      <div class="col col-left">
+        <!-- Player / Now Playing -->
+        <section class="panel player">
+          <div class="panel-h">NOW PLAYING <span class="dim">[ player ]</span></div>
+          <div class="np-title" id="npTitle">Ping 127.0.0.1</div>
+          <div class="np-sub" id="npSub">localhost &middot; lo-fi</div>
+          <div class="np-status"><span class="dot" id="npDot"></span><span id="npState">PAUSED</span> <span class="dim" id="npFormat">-- &middot; -- &middot; --</span></div>
+          <canvas class="wavebox" id="waveCanvas" width="640" height="90"></canvas>
+          <div class="np-ctrls">
+            <button data-act="prev" title="上一首 (媒体键/Prev)">|&lt;</button>
+            <button data-act="play" title="播放/暂停 (媒体键)">&#9654;</button>
+            <button data-act="next" title="下一首 (媒体键/Next)">&gt;|</button>
+            <button data-act="loop" title="列表循环">LOOP</button>
+            <button data-act="shuffle" title="随机">SHUF</button>
+          </div>
+        </section>
+
+        <!-- Lyrics / stdout -->
+        <section class="panel lyrics">
+          <div class="panel-h">LYRICS / STDOUT <span class="dim">[ reply log ]</span></div>
+          <div class="stdout" id="stdout"></div>
+        </section>
+
+        <!-- Command -->
+        <section class="panel command">
+          <div class="panel-h">COMMAND <span class="dim">[ enter ? for help ]</span></div>
+          <div class="cmd-line">
+            <span class="prompt" id="cmdPrompt">C:\MUSIC&gt;</span>
+            <input id="cmdInput" autocomplete="off" spellcheck="false" placeholder="type a command, e.g. load" />
+          </div>
+        </section>
+      </div>
+
+      <!-- 右列 -->
+      <div class="col col-right">
+        <!-- Spectrum -->
+        <section class="panel spectrum">
+          <div class="panel-h">SPECTRUM <span class="dim">[ analyser ]</span></div>
+          <canvas id="specCanvas" width="640" height="200"></canvas>
+        </section>
+
+        <!-- Audio / System -->
+        <section class="panel audio">
+          <div class="panel-h">AUDIO / SYSTEM <span class="dim">[ header ]</span></div>
+          <div class="kv" id="audioInfo">
+            <div><span class="dim">codec</span> <b id="aCodec">--</b></div>
+            <div><span class="dim">sample</span> <b id="aSample">--</b></div>
+            <div><span class="dim">bit</span> <b id="aBit">--</b></div>
+            <div><span class="dim">channel</span> <b id="aChannel">--</b></div>
+          </div>
+          <div class="bars">
+            <div class="bar-row"><span class="dim">CPU</span><div class="meter"><i id="mCpu"></i></div></div>
+            <!-- GPU 这里显示的是【加速状态三态】（能不能用硬件加速，恒定环境状态），
+                 不是百分比 —— 百分比在顶部状态栏的 GPU 数字上，那里读的是
+                 Windows 性能计数器 \GPU Engine(*)\Utilization Percentage，
+                 按本应用各进程 pid 过滤，是真实测量。
+                 （早前"Node 拿不到 GPU 占用率"的说法是错的：NVML/D3DKMT
+                   确实要原生模块，但 Windows 性能计数器是 Node 直接可读的。） -->
+            <div class="bar-row"><span class="dim">GPU</span><b id="gpuState" title="">--</b></div>
+            <div class="bar-row"><span class="dim">RAM</span><div class="meter"><i id="mRam"></i></div></div>
+          </div>
+        </section>
+
+        <!-- Playlist -->
+        <section class="panel playlist">
+          <div class="panel-h">PLAYLIST <span class="dim" id="plMeta">[ 0 tracks ]</span></div>
+          <div class="pl-list" id="plList"></div>
+        </section>
+      </div>
+    </div>
+
+    <!-- 底部 Progress -->
+    <div class="progress">
+      <span class="t-cur" id="tCur">00:00</span>
+      <div class="prog" id="prog">
+        <div class="prog-fill" id="progFill"></div>
+        <div class="prog-handle" id="progHandle"></div>
+      </div>
+      <span class="t-tot" id="tTot">00:00</span>
+      <span class="dim fmt" id="progFmt">-- &middot; local file</span>
+      <span class="mode-tag" id="modeTag">&#9703; WINDOW</span>
+      <span class="lock-tag" id="lockTag"></span>
+    </div>
+  </div>
+</div>
+
+<!-- 主题/背景设置 UI 已迁出本文件 → renderer/settings.html（独立窗口）。
+     入口：系统托盘右键菜单 →「⚙ 设置…」，或 Ctrl+Alt+C 控制面板。
+     原 .settings 面板（含 bgColor/fgColor/acColor/bgAlpha/presets/btnMode/btnAdd）
+     在此整体删除。注意 app.js 的 applyTheme() 原先会 $('bgColor').value = ...
+     回填这几个控件，元素不存在时 $() 返回 null 会抛 TypeError，
+     那几行已同步改为可选链。 -->
+
+<!-- 隐藏的文件选择（窗口态也可用） -->
+<input type="file" id="filePicker" accept="audio/*" multiple hidden />
+<input type="file" id="folderPicker" webkitdirectory directory multiple hidden />
+
+<script src="app.js"></script>
+</body>
+</html>

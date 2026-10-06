@@ -1,0 +1,133 @@
+/* ============================================================
+   settings.css — 独立设置窗口样式
+   从主窗口 styles.css 的 .settings 段落搬来并改造：
+     - 面板铺满窗口（不再是 fixed 浮层）
+     - html/body 写实底色（独立窗口不需要透出桌面）
+     - 标题栏可拖动（-webkit-app-region: drag）
+   ============================================================ */
+
+:root {
+  --bg: #0000aa;
+  --fg: #e8e8e8;
+  --dim: #9a9ad6;
+  --accent: #66ccff;
+  --mono: "Cascadia Code", Consolas, "Courier New", monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: #00005e;          /* 独立窗口不透明，classic 主题 panel 色 */
+  color: var(--fg);
+  font-family: var(--mono);
+  font-size: 12px;
+  overflow: hidden;
+}
+
+.settings {
+  width: 100%;
+  min-height: 100%;
+  background: #00005e;
+  border: 1px solid var(--accent);
+  color: var(--fg);
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 10px 12px 12px;
+  overflow-y: auto;             /* 窗口被压矮时内容可滚动，不被裁掉 */
+}
+
+/* 标题栏：整体可拖动窗口 */
+.s-title {
+  -webkit-app-region: drag;
+  color: var(--accent);
+  letter-spacing: 1px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--dim);
+  padding-bottom: 5px;
+  margin-bottom: 10px;
+  user-select: none;
+  cursor: default;
+}
+
+/* ✕ 按钮必须 no-drag，否则点不动 */
+.s-title .x {
+  -webkit-app-region: no-drag;
+  cursor: pointer;
+  color: var(--dim);
+  padding: 0 4px;
+  font-size: 13px;
+  line-height: 1;
+}
+.s-title .x:hover { color: var(--accent); }
+
+.settings label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 8px 0;
+  gap: 8px;
+}
+
+.settings input[type=color] {
+  width: 44px;
+  height: 22px;
+  background: none;
+  border: 1px solid var(--dim);
+  padding: 0;
+  cursor: pointer;
+}
+
+.settings input[type=range] {
+  flex: 1;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 12px 0 8px;
+}
+
+.presets button,
+.set-actions button {
+  font-family: var(--mono);
+  font-size: 11px;
+  background: #00007a;
+  color: var(--fg);
+  border: 1px solid var(--dim);
+  padding: 5px 8px;
+  cursor: pointer;
+}
+.presets button:hover,
+.set-actions button:hover { border-color: var(--accent); color: var(--accent); }
+.presets button:active,
+.set-actions button:active { background: #0000aa; }
+
+.set-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--dim);
+}
+
+/* 故障提示：用户不用开 devtools 也能看到异常 */
+.s-err {
+  margin-top: 10px;
+  padding: 5px 7px;
+  border: 1px solid #ff5555;
+  background: #2a0000;
+  color: #ff6b6b;
+  font-size: 11px;
+  line-height: 1.45;
+  word-break: break-all;
+  white-space: pre-wrap;
+}

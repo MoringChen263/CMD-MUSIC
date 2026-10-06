@@ -1,0 +1,32 @@
+{
+  "name": "cmd-music",
+  "version": "0.2.0",
+  "description": "仿 CMD 风格桌面壁纸音乐播放器（Electron 真·桌面背景层）",
+  "main": "main.js",
+  "scripts": {
+    "start": "node start.js",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
+  },
+  "author": "you",
+  "license": "MIT",
+  "build": {
+    "appId": "com.cmdmusic.app",
+    "productName": "CMD-MUSIC",
+    "electronDist": "node_modules/electron/dist",
+    "files": [
+      "**/*",
+      "!frontend",
+      "!Demo",
+      "!docs"
+    ],
+    "win": {
+      "target": "nsis"
+    }
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3"
+  }
+}

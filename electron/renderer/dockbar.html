@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'" />
+<title>CMD-MUSIC // DOCK</title>
+<link rel="stylesheet" href="dockbar.css" />
+</head>
+<body>
+  <!-- 整条是拖动区；按钮/滑块在 CSS 里单独标 no-drag 覆盖回来 -->
+  <div class="dock" id="dock">
+    <button class="tbtn" id="btnPrev" title="上一曲">&#9198;</button>
+    <button class="tbtn play" id="btnPlay" title="播放/暂停">&#9199;</button>
+    <button class="tbtn" id="btnNext" title="下一曲">&#9197;</button>
+
+    <div class="volwrap">
+      <span class="vico">&#9834;</span>
+      <input type="range" id="vol" min="0" max="100" value="100" class="vol" />
+    </div>
+
+    <div class="meta">
+      <div class="title" id="npTitle">--</div>
+      <div class="sub" id="npSub">CMD-MUSIC</div>
+    </div>
+
+    <button class="tbtn" id="btnSettings" title="设置 / 控制面板">&#9881;</button>
+    <button class="tbtn" id="btnMode" title="切回窗口模式">&#9633;</button>
+  </div>
+  <script src="dockbar.js"></script>
+</body>
+</html>

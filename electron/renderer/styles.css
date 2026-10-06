@@ -1,0 +1,396 @@
+/* ============================================================
+   CMD-MUSIC — 经典 cmd.exe 风格（Electron 渲染层）
+   主题全部由 CSS 变量驱动，整屏（含内部面板）统一跟随。
+   壁纸模式下的"点击穿透"由主进程 setIgnoreMouseEvents 控制，
+   此处只负责视觉（去标题栏 / 铺满 / 透明），不再用 CSS pointer-events。
+   ============================================================ */
+
+:root {
+  --cmd-bg-rgb: 0, 0, 170;
+  /* --cmd-bg-alpha = 滑块的【原始目标值】(0~1)，即用户心里"我要多透明"。
+     它【不直接】给任何背景色用，只作为 --cmd-layer-alpha 的输入。
+     见下方"透明度叠乘反解"的说明。 */
+  --cmd-bg-alpha: 1;
+  /* --cmd-layer-alpha = 真正写进每个背景层的单层 alpha。
+     由 app.js 的 applyAlpha() 按当前模式算出并写入（不是 CSS calc 能做的）。 */
+  --cmd-layer-alpha: 1;
+
+  /* 以下三档由 app.js 的 setBgVars() 从 --cmd-bg-rgb 自动派生，不要手写死值 */
+  --cmd-panel-rgb: 0, 0, 94;
+  --cmd-sunken-rgb: 0, 0, 47;
+  --cmd-chip-rgb: 46, 46, 200;
+
+  /* 供 rgba(var(--cmd-x-rgb), <alpha>) 用的三元组版本。
+     以前 .dot / .prog-fill / .meter i / 滚动条 thumb 直接写 var(--cmd-accent)
+     这种【十六进制实色】——它们是不透明源，alpha 滑块永远作用不到，
+     探针实测在 alpha=0.3 时仍有 19/384 个采样点 a>=250，其中大部分就落在这些元素上。 */
+  --cmd-dim-rgb: 154, 154, 214;
+  --cmd-accent-rgb: 102, 204, 255;
+  --cmd-bright-rgb: 255, 255, 255;
+  --cmd-green-rgb: 51, 255, 102;
+
+  /* ---- 透明度叠乘反解（本次修复的核心）----
+     问题：半透明是【逐层叠乘】的。窗口态下 .stage → .screen → .panel 三层
+     都带背景色，合成不透明度 = 1-(1-a1)(1-a2)(1-a3)。以前每层都直接吃
+     滑块值 0.3，于是 1-(1-0.3)³ = 0.648 —— 滑块拖到 30%，屏幕上却是
+     65% 不透明。这就是用户说的"拖了跟没拖一样"（probe_alpha_grid.js 实测
+     alpha=0.3 时 244/384 个采样点落在 a≈160 ≈ 0.63）。
+
+     解法：反解每层 alpha。要让 n 层叠乘后的合成值恰好等于目标 T，
+     每层必须取 a = 1-(1-T)^(1/n)。n 取【窗口态的典型层数】= 3
+     （.stage + .screen + .panel，panel 占屏幕绝大部分面积）。
+     于是 3 层区域精确等于 T；层数更少的区域（stage 外圈、titlebar）
+     会比 T 更透，层数更多的区域（.wavebox/.prog/.meter 等井内嵌套，
+     4 层）略比 T 密一点——后者是刻意的：那些是"凹陷井"，视觉上本就该
+     比周围板略实，层次感靠的就是这点差别。
+
+     壁纸态只有 .screen 一层，n=1 直接等于 T（见 app.js applyAlpha）。
+     绝不能两个模式共用一个 n，否则壁纸态会整体偏透明 3 倍。 */
+  --cmd-panel-alpha: var(--cmd-layer-alpha);
+  --cmd-sunken-alpha: var(--cmd-layer-alpha);
+  --cmd-chip-alpha: var(--cmd-layer-alpha);
+  /* 井内元素（.wavebox / #specCanvas / .meter / .prog）比面板多一层，
+     用略高的单层 alpha 补偿，否则进度条底槽会淡得看不见。 */
+  --cmd-well-alpha: var(--cmd-layer-alpha);
+  /* 强调色实心元件（进度条填充/手柄/meter 柱）跟井底同层。 */
+  --cmd-solid-alpha: var(--cmd-layer-alpha);
+
+  /* 窗口外框（.stage 的 border 与两条 inset 立体斜角）的透明度。
+     跟着 --cmd-layer-alpha 走，但设 0.22 的下限——alpha 拉到 0 时若外框
+     也全透明，窗口就完全"消失"在桌面里，用户既看不到窗口边界，
+     也没法知道刚才那个东西还在。0.22 是既能看出边界、又不至于在透明
+     窗口上留下明显灰圈的折中值。 */
+  --cmd-frame-alpha: min(1, max(0.22, var(--cmd-layer-alpha) * 1.1));
+  --cmd-fg: #e8e8e8;
+  --cmd-bright: #ffffff;
+  --cmd-dim: #9a9ad6;
+  --cmd-accent: #66ccff;
+  --cmd-green: #33ff66;
+  --cmd-yellow: #ffd633;
+
+  --mono: "Cascadia Code", "Consolas", "Courier New", "Lucida Console", monospace;
+  --titlebar-h: 28px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: transparent;          /* 窗口透明，壁纸态可透出桌面 */
+  font-family: var(--mono);
+  overflow: hidden;
+}
+
+/* ===== 仿 CMD 窗口 =====
+   窗口态：.stage 必须【铺满整个 BrowserWindow】。
+   之前这里写的是 width: min(92vw, 1180px) / height: min(90vh, 760px) + 居中 translate，
+   那是"把一个网页窗口摆到桌面中间"的思路，但本应用的窗口本身就是那个 CMD 窗口
+   （frame:false + transparent:true，窗口没有系统边框，全靠 .stage 画），
+   于是 92vw/90vh 扣掉的边距就变成了【窗口内侧一圈透明缝隙】，
+   透出桌面图标 —— 即用户报告的"窗口四周留有空隙"。
+   实测（探针 windowMode，1280x800 窗口）：.stage 只有 1165x686，四周各空 57px。
+
+   现在窗口态直接 inset:0 铺满；只有壁纸态才需要"整屏铺满"的独立规则（见下方
+   .stage.wallpaper），两者互不影响。 */
+/* 立体斜角（inset 白/灰）是「CMD 味」的来源，必须保留。
+   但它们和 border 的颜色都要跟随 --cmd-frame-alpha，否则背景透明后
+   会剩一圈死板的实色灰边。box-shadow 用 rgba 白色/灰色 + 同一 alpha。 */
+.stage {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  /* 关键修复：原来是 background:#c0c0c0 —— 一层【不透明】的经典灰，
+     垫在 .screen(rgba(bg,alpha)) 下面。alpha 滑块调低时，透出的不是桌面
+     而是这层灰，用户看到的就是"界面变灰"而不是"界面变透明"。
+     像素实测（probe_alpha_real.js）：alpha=0 时屏幕上是纯 #c0c0c0(192,192,192)
+     且 alpha 通道恒为 255；注入 background:transparent 的对照组则 a=0 真透明。
+     这里改用派生的 --cmd-panel-rgb（比底色深/浅一档），与 .screen 的底色
+     形成层次，同时两者都跟随 alpha。 */
+  background: rgba(var(--cmd-panel-rgb), var(--cmd-layer-alpha));
+  border: 2px solid rgba(192, 192, 192, var(--cmd-frame-alpha));
+  box-shadow:
+    inset -2px -2px 0 rgba(128, 128, 128, var(--cmd-frame-alpha)),
+    inset 2px 2px 0 rgba(255, 255, 255, var(--cmd-frame-alpha)),
+    0 10px 40px rgba(0, 0, 0, var(--cmd-layer-alpha));
+  display: flex;
+  flex-direction: column;
+  /* 只给颜色类属性过渡。若留在 all 上，窗口被拖拽缩放时 width/height 也会走
+     .25s 动画，内容会明显滞后于窗口边缘（窗口态铺满后 width/height 是跟着
+     窗口实时变的，这个回归会被放大）。
+     ⚠ 拖 alpha 滑块时也走这条过渡：连续拖动会有一堆过渡叠加，
+     实测过慢。把 background-color 单独压到 .12s，拖起来才跟手。 */
+  transition: border-color .25s ease, box-shadow .25s ease, background-color .12s linear;
+}
+
+/* 壁纸模式：整屏覆盖当前桌面壁纸，成为"动态壁纸"。
+   - .stage 铺满全屏
+   - .screen 整屏铺满并使用主题底色（由 --cmd-bg-rgb/--cmd-bg-alpha 驱动，保留调色能力）
+   注意 1：不要再硬编码 #c0c0c0 灰底，否则会破坏主题变量（配色错乱）。
+   注意 2：必须关掉 transition。基础 .stage 有 .25s 的颜色过渡，
+     切壁纸时若不关，窗口会"渐变"0.25 秒才铺满，视觉上像弹窗动画；也会让 e2e 量到中间值。 */
+.stage.wallpaper {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  transform: none;
+  border: none;
+  box-shadow: none;
+  background: transparent;
+  padding: 0;
+  transition: none;
+}
+.stage.wallpaper .titlebar { display: none; }
+
+/* 整屏铺满的主题底色：壁纸态默认给一点透明度，既能看到壁纸又保留 cmd 质感 */
+.stage.wallpaper .screen {
+  position: absolute;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(var(--cmd-bg-rgb), var(--cmd-layer-alpha));
+  border: none;
+  padding: 10px;
+}
+
+/* 标题栏。渐变两端原本是硬编码的 #0000aa / #1a1ad0（完全不透明），
+   是 .stage 之外的第二个「不透明源」：窗口态下这 28px 会始终是一道实色蓝条，
+   即使背景调成全透明也透不出桌面。改用派生的 panel/chip 色 + alpha。 */
+.titlebar {
+  height: var(--titlebar-h);
+  flex: 0 0 var(--titlebar-h);
+  background: linear-gradient(90deg,
+    rgba(var(--cmd-panel-rgb), var(--cmd-layer-alpha)),
+    rgba(var(--cmd-chip-rgb), var(--cmd-layer-alpha)));
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 6px 0 8px;
+  font-size: 13px;
+  letter-spacing: .5px;
+  user-select: none;
+  -webkit-app-region: drag;          /* 允许拖拽移动窗口 */
+}
+.tb-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tb-btns { display: flex; gap: 4px; -webkit-app-region: no-drag; }
+.tb-btn {
+  width: 18px; height: 18px;
+  display: inline-flex; align-items: center; justify-content: center;
+  /* 经典灰按钮，但不能是不透明实色（否则半透明窗口上会浮着三个灰方块）。
+     用 --cmd-frame-alpha：alpha 拉到底时仍有 0.3 下限，边界不会消失。 */
+  background: rgba(192, 192, 192, var(--cmd-frame-alpha));
+  color: #000;
+  border: 1px solid rgba(255, 255, 255, var(--cmd-frame-alpha));
+  border-right-color: rgba(128, 128, 128, var(--cmd-frame-alpha));
+  border-bottom-color: rgba(128, 128, 128, var(--cmd-frame-alpha));
+  font-size: 11px; line-height: 1; cursor: default;
+}
+.tb-btn:hover { background: rgba(212, 212, 212, var(--cmd-frame-alpha)); }
+
+/* 屏幕主区 */
+.screen {
+  flex: 1 1 auto;
+  background: rgba(var(--cmd-bg-rgb), var(--cmd-layer-alpha));
+  color: var(--cmd-fg);
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+  gap: 8px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Header */
+.header {
+  display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1px solid var(--cmd-dim);
+  padding-bottom: 5px;
+  font-size: 13px;
+}
+.h-brand { color: var(--cmd-bright); letter-spacing: 1px; }
+.h-stats { display: flex; gap: 14px; color: var(--cmd-dim); font-size: 12px; }
+.h-stats b { color: var(--cmd-accent); }
+/* 原 .h-gear（header 右上角的齿轮，index.html:33 + app.js 的 toggleSettings）
+   已随"设置迁移到托盘菜单"整体删除：壁纸态那个位置被 SysListView32
+   挡住、点不动（192 点命中网格实测命中 0 个），留着只是个骗人的死图标。
+   设置入口现在在系统托盘右键菜单 → 「⚙ 设置…」。 */
+
+/* 主工作区两列：右侧列(含歌单)略宽，给歌曲列表留出空间 */
+.main {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: 1fr 1.08fr;
+  gap: 8px;
+  min-height: 0;
+}
+.col { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+.col-left { min-width: 0; }
+.col-right { min-width: 0; }
+
+/* 面板统一风格：比屏幕深一档，保留框中框层次，且跟随主题。
+   注意：这里必须用派生的 --cmd-panel-rgb，而不是 rgba(bg, .55)——
+   后者与屏幕底色同色，叠上去等于没叠，面板会糊成一片。 */
+.panel {
+  background: rgba(var(--cmd-panel-rgb), var(--cmd-panel-alpha));
+  border: 1px solid var(--cmd-dim);
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.panel-h {
+  color: var(--cmd-accent);
+  font-size: 12px;
+  letter-spacing: 1px;
+  border-bottom: 1px dashed var(--cmd-dim);
+  padding-bottom: 3px;
+  margin-bottom: 5px;
+  flex: 0 0 auto;
+  text-transform: uppercase;
+}
+.dim { color: var(--cmd-dim); }
+
+/* ---- Player ---- */
+.player { flex: 0 0 auto; }
+.np-title { color: var(--cmd-bright); font-size: 22px; font-weight: bold; }
+.np-sub { color: var(--cmd-fg); font-size: 13px; margin-top: 2px; }
+.np-status { font-size: 13px; margin-top: 4px; display: flex; align-items: center; gap: 6px; }
+.dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  /* 原来是 background: var(--cmd-dim) —— 十六进制实色，alpha 滑块作用不到，
+     探针实测 alpha=0.3 时这是个 a=255 的不透明点。改用 rgba 三元组 + 井层 alpha。 */
+  background: rgba(var(--cmd-dim-rgb), var(--cmd-solid-alpha)); display: inline-block;
+}
+.dot.on {
+  background: rgba(var(--cmd-green-rgb), var(--cmd-solid-alpha));
+  box-shadow: 0 0 6px rgba(var(--cmd-green-rgb), var(--cmd-solid-alpha));
+}
+.wavebox {
+  width: 100%; height: 70px; margin-top: 8px;
+  background: rgba(var(--cmd-sunken-rgb), var(--cmd-sunken-alpha));
+  border: 1px solid var(--cmd-dim);
+  display: block;
+}
+.np-ctrls { display: flex; gap: 6px; margin-top: 8px; }
+.np-ctrls button {
+  font-family: var(--mono);
+  background: rgba(var(--cmd-chip-rgb), var(--cmd-chip-alpha));
+  color: var(--cmd-bright);
+  border: 1px solid var(--cmd-dim);
+  padding: 3px 9px; cursor: pointer; font-size: 12px;
+}
+.np-ctrls button:hover { border-color: var(--cmd-accent); color: var(--cmd-bright); }
+.np-ctrls button.active { background: rgba(var(--cmd-accent-rgb), var(--cmd-solid-alpha)); color: #001; }
+
+/* ---- Lyrics / stdout ---- */
+.lyrics { flex: 1 1 auto; }
+.stdout {
+  flex: 1 1 auto;
+  font-size: 12.5px; line-height: 1.55;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--cmd-fg);
+}
+.stdout .ok { color: var(--cmd-green); }
+.stdout .warn { color: var(--cmd-yellow); }
+.stdout .err { color: #ff5555; }
+.stdout .echo { color: var(--cmd-accent); }
+.stdout::-webkit-scrollbar { width: 8px; }
+.stdout::-webkit-scrollbar-thumb { background: rgba(var(--cmd-dim-rgb), var(--cmd-solid-alpha)); }
+
+/* ---- Command ---- */
+.command { flex: 0 0 auto; }
+.cmd-line { display: flex; align-items: center; gap: 6px; }
+.prompt { color: var(--cmd-green); font-size: 13px; white-space: nowrap; }
+#cmdInput {
+  flex: 1 1 auto;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--cmd-bright);
+  font-family: var(--mono);
+  font-size: 13px;
+  caret-color: var(--cmd-green);
+}
+
+/* ---- Spectrum ---- */
+.spectrum { flex: 0 0 auto; }
+#specCanvas {
+  width: 100%; height: 120px; flex: 0 0 auto; min-height: 0;
+  background: rgba(var(--cmd-sunken-rgb), var(--cmd-sunken-alpha));
+  border: 1px solid var(--cmd-dim);
+  display: block;
+  image-rendering: pixelated;
+}
+
+/* ---- Audio / System ---- */
+.audio { flex: 0 0 auto; }
+.kv { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 14px; font-size: 12px; }
+.kv b { color: var(--cmd-bright); }
+.bars { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
+.bar-row { display: flex; align-items: center; gap: 8px; font-size: 11px; }
+.bar-row .dim { width: 30px; }
+.meter { flex: 1; height: 9px; background: rgba(var(--cmd-sunken-rgb), var(--cmd-sunken-alpha)); border: 1px solid var(--cmd-dim); overflow: hidden; }
+.meter i { display: block; height: 100%; width: 0%; background: rgba(var(--cmd-accent-rgb), var(--cmd-solid-alpha)); transition: width .3s linear; }
+
+/* ---- Playlist ---- */
+.playlist { flex: 1 1 auto; }
+.pl-list { flex: 1 1 auto; overflow-y: auto; font-size: 12.5px; }
+/* 壁纸态：鼠标悬停到面板上时给一层描边，明确"这块可交互"，
+   因为此时面板周围是穿透到桌面的，不提示的话用户不知道哪里能点。 */
+.stage.wallpaper .panel:hover { border-color: var(--cmd-accent); }
+.pl-list .row {
+  display: flex; gap: 8px; padding: 2px 4px; align-items: baseline;
+  cursor: pointer;
+}
+.pl-list .row:hover { background: rgba(var(--cmd-chip-rgb), var(--cmd-chip-alpha)); }
+.pl-list .row .idx { color: var(--cmd-dim); width: 22px; text-align: right; }
+.pl-list .row .name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pl-list .row .dur { color: var(--cmd-dim); }
+.pl-list .row.cur { color: var(--cmd-green); }
+.pl-list .row.cur .idx { color: var(--cmd-green); }
+.pl-list::-webkit-scrollbar { width: 8px; }
+.pl-list::-webkit-scrollbar-thumb { background: rgba(var(--cmd-dim-rgb), var(--cmd-solid-alpha)); }
+
+/* ---- Progress ---- */
+.progress {
+  flex: 0 0 auto;
+  display: flex; align-items: center; gap: 10px;
+  border-top: 1px solid var(--cmd-dim);
+  padding-top: 6px;
+  font-size: 12px;
+}
+.t-cur, .t-tot { color: var(--cmd-bright); width: 46px; }
+.prog {
+  position: relative; flex: 1 1 auto; height: 12px;
+  background: rgba(var(--cmd-sunken-rgb), var(--cmd-sunken-alpha));
+  border: 1px solid var(--cmd-dim);
+  overflow: hidden;
+}
+.prog-fill {
+  position: absolute; left: 0; top: 0; bottom: 0; width: 100%;
+  transform-origin: left center;
+  transform: scaleX(0);
+  /* 原来是 background: var(--cmd-accent) 实色 —— alpha=0.3 时进度条
+     整整一条都是 a=255（探针里 div.progress 占了 16/19 个不透明点）。 */
+  background: rgba(var(--cmd-accent-rgb), var(--cmd-solid-alpha));
+}
+.prog-handle {
+  position: absolute; top: -1px; bottom: -1px; width: 3px;
+  background: rgba(var(--cmd-bright-rgb), var(--cmd-solid-alpha));
+  transform: translateX(0);
+  will-change: transform;
+}
+.fmt { margin-left: 4px; }
+.mode-tag { color: var(--cmd-yellow); white-space: nowrap; }
+.lock-tag { color: var(--cmd-green); white-space: nowrap; }
+
+/* 原 .settings / .settings-h / .presets / .set-actions 一整段已删除。
+   设置 UI 已迁移为独立窗口 renderer/settings.html + settings.css，
+   那边的样式是自包含的（独立窗口底色写实色 #00005e，不需要透出桌面）。
+   留在这里会与新窗口的类名撞车，且这些选择器在 index.html 里
+   已无对应元素（纯死代码）。 */

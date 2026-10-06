@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'" />
+<title>CMD-MUSIC // SETTINGS</title>
+<link rel="stylesheet" href="settings.css" />
+</head>
+<body>
+  <div class="settings" id="settings">
+    <div class="s-title">
+      <span>CMD-MUSIC // SETTINGS</span>
+      <span class="x" id="btnClose" title="关闭">&#10005;</span>
+    </div>
+
+    <label>背景色 <input type="color" id="bgColor" value="#0000aa" /></label>
+    <label>文字色 <input type="color" id="fgColor" value="#e8e8e8" /></label>
+    <label>强调色 <input type="color" id="acColor" value="#66ccff" /></label>
+    <label>透明度 <input type="range" id="bgAlpha" min="0" max="1" step="0.05" value="1" /></label>
+
+    <div class="presets">
+      <button data-preset="classic">经典CMD</button>
+      <button data-preset="black">黑终端</button>
+      <button data-preset="green">绿磷光</button>
+      <button data-preset="amber">琥珀</button>
+      <button data-preset="transblue">透明蓝</button>
+    </div>
+
+    <div class="set-actions">
+      <button id="btnMode">切换壁纸/窗口 (Ctrl+Alt+W)</button>
+      <button id="btnAdd">+ 添加音乐 (Ctrl+O)</button>
+    </div>
+
+    <div class="s-err" id="errBar" hidden></div>
+  </div>
+
+  <script src="settings.js"></script>
+</body>
+</html>

@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'" />
+<title>CMD-MUSIC // 控制面板</title>
+<link rel="stylesheet" href="control-panel.css" />
+</head>
+<body>
+  <div class="cp">
+    <div class="cp-h">CONTROL PANEL <span class="x" id="cpClose">&#10005;</span></div>
+    <div class="cp-now"><span class="dim">NOW</span> <b id="cpNow">--</b> <span id="cpState" class="dim">--</span></div>
+    <div class="cp-row">
+      <button id="cpFiles">＋ 文件</button>
+      <button id="cpFolder">＋ 文件夹</button>
+      <button id="cpMode">◧ 切换模式</button>
+    </div>
+    <div class="cp-cmd">
+      <span class="prompt">C:\MUSIC&gt;</span>
+      <input id="cpInput" autocomplete="off" spellcheck="false" placeholder="命令：play / next / prev / load / help" />
+    </div>
+    <!-- 这句文案以前写的是「壁纸模式下主窗不可点击」，与实际行为矛盾，且会把用户
+         锁死在"只能加歌"里：主窗在壁纸态【是】可以点的，规则是"按控件热区判定"——
+         鼠标停在按钮/齿轮/歌单行/输入框上时穿透关闭、控件正常响应；
+         停在面板空白处才穿透、点击落到桌面（这样桌面图标才点得动）。
+         与 app.js:437 setMode 的日志、app.js:8 的头注释保持一致。 -->
+    <div class="cp-hint dim">壁纸模式下主窗按控件热区响应：点在按钮/齿轮/歌单行上有效，点在空白处透到桌面。此面板用于加歌与快捷控制。Ctrl+Alt+C 开关。</div>
+  </div>
+  <script src="control-panel.js"></script>
+</body>
+</html>

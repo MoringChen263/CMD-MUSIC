@@ -1,0 +1,329 @@
+/* ============================================================
+   CMD-MUSIC Demo — 经典 cmd.exe 风格
+   主题全部由 CSS 变量驱动，整屏（含内部面板）统一跟随，
+   不出现"改背景色只有边框变"的 bug。
+   ============================================================ */
+
+:root {
+  /* 背景色拆成 "r,g,b" 三元组，所有区域从它派生 */
+  --cmd-bg-rgb: 0, 0, 170;
+  --cmd-bg-alpha: 1;
+  --cmd-fg: #e8e8e8;
+  --cmd-bright: #ffffff;
+  --cmd-dim: #9a9ad6;
+  --cmd-accent: #66ccff;   /* cyan-ish */
+  --cmd-green: #33ff66;
+  --cmd-yellow: #ffd633;
+
+  --mono: "Cascadia Code", "Consolas", "Courier New", "Lucida Console", monospace;
+  --titlebar-h: 28px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: #0a0a12;
+  font-family: var(--mono);
+  overflow: hidden;
+}
+
+/* 假的桌面壁纸：壁纸模式下透出，演示"长在桌面背景" */
+.desktop-fake {
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(circle at 20% 30%, #2a3a6a 0, transparent 40%),
+    radial-gradient(circle at 80% 70%, #5a2a6a 0, transparent 45%),
+    linear-gradient(135deg, #141826, #20303a);
+  display: none;
+  z-index: 0;
+}
+
+/* ===== 仿 CMD 窗口 ===== */
+.stage {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(92vw, 1180px);
+  height: min(90vh, 720px);
+  background: #c0c0c0;            /* 外层 3D 灰边框色 */
+  border: 2px solid #c0c0c0;
+  box-shadow:
+    inset -2px -2px 0 #808080,
+    inset 2px 2px 0 #ffffff,
+    0 10px 40px rgba(0,0,0,.6);
+  display: flex;
+  flex-direction: column;
+  z-index: 10;
+  transition: all .25s ease;
+}
+
+/* 壁纸模式：去边框、铺满、透明、不挡应用（demo 用 pointer-events 模拟"点不到"） */
+.stage.wallpaper {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  transform: none;
+  border: none;
+  box-shadow: none;
+  background: transparent;
+}
+.stage.wallpaper .titlebar { display: none; }
+.stage.wallpaper .desktop-fake { display: block; }
+.stage.wallpaper .screen {
+  background: rgba(var(--cmd-bg-rgb), var(--cmd-bg-alpha));
+  border: none;
+}
+/* 壁纸态下整窗不响应鼠标（真实壁纸父窗口同理），仅保留控制面板与齿轮可点 */
+.stage.wallpaper { pointer-events: none; }
+.stage.wallpaper .settings { pointer-events: auto; }
+.stage.wallpaper .h-gear { pointer-events: auto; }   /* 壁纸态也能开设置面板 */
+
+/* 标题栏 */
+.titlebar {
+  height: var(--titlebar-h);
+  flex: 0 0 var(--titlebar-h);
+  background: linear-gradient(90deg, #0000aa, #1a1ad0);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 6px 0 8px;
+  font-size: 13px;
+  letter-spacing: .5px;
+  user-select: none;
+}
+.tb-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tb-btns { display: flex; gap: 4px; }
+.tb-btn {
+  width: 18px; height: 18px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: #c0c0c0; color: #000;
+  border: 1px solid #fff; border-right-color: #808080; border-bottom-color: #808080;
+  font-size: 11px; line-height: 1; cursor: default;
+}
+
+/* 屏幕主区 */
+.screen {
+  flex: 1 1 auto;
+  background: rgba(var(--cmd-bg-rgb), var(--cmd-bg-alpha));
+  color: var(--cmd-fg);
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+  gap: 8px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Header */
+.header {
+  display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1px solid var(--cmd-dim);
+  padding-bottom: 5px;
+  font-size: 13px;
+}
+.h-brand { color: var(--cmd-bright); letter-spacing: 1px; }
+.h-stats { display: flex; gap: 14px; color: var(--cmd-dim); font-size: 12px; }
+.h-stats b { color: var(--cmd-accent); }
+.h-gear {
+  margin-left: 14px; color: var(--cmd-accent); font-size: 17px;
+  cursor: pointer; user-select: none; line-height: 1; align-self: center;
+}
+.h-gear:hover { color: var(--cmd-bright); }
+
+/* 主工作区两列：右侧列(含歌单)略宽，给歌曲列表留出空间 */
+.main {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: 1fr 1.08fr;
+  gap: 8px;
+  min-height: 0;
+}
+.col { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+.col-left { min-width: 0; }
+.col-right { min-width: 0; }
+
+/* 面板统一风格：比屏幕更深一档，保留框中框层次，且跟随主题 */
+.panel {
+  background: rgba(var(--cmd-bg-rgb), 0.55);
+  border: 1px solid var(--cmd-dim);
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.panel-h {
+  color: var(--cmd-accent);
+  font-size: 12px;
+  letter-spacing: 1px;
+  border-bottom: 1px dashed var(--cmd-dim);
+  padding-bottom: 3px;
+  margin-bottom: 5px;
+  flex: 0 0 auto;
+  text-transform: uppercase;
+}
+.dim { color: var(--cmd-dim); }
+
+/* ---- Player ---- */
+.player { flex: 0 0 auto; }
+.np-title { color: var(--cmd-bright); font-size: 22px; font-weight: bold; }
+.np-sub { color: var(--cmd-fg); font-size: 13px; margin-top: 2px; }
+.np-status { font-size: 13px; margin-top: 4px; display: flex; align-items: center; gap: 6px; }
+.dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--cmd-dim); display: inline-block;
+}
+.dot.on { background: var(--cmd-green); box-shadow: 0 0 6px var(--cmd-green); }
+.wavebox {
+  width: 100%; height: 70px; margin-top: 8px;
+  background: rgba(var(--cmd-bg-rgb), 0.7);
+  border: 1px solid var(--cmd-dim);
+  display: block;
+}
+.np-ctrls { display: flex; gap: 6px; margin-top: 8px; }
+.np-ctrls button {
+  font-family: var(--mono);
+  background: rgba(var(--cmd-bg-rgb), 0.8);
+  color: var(--cmd-fg);
+  border: 1px solid var(--cmd-dim);
+  padding: 3px 9px; cursor: pointer; font-size: 12px;
+}
+.np-ctrls button:hover { border-color: var(--cmd-accent); color: var(--cmd-bright); }
+.np-ctrls button.active { background: var(--cmd-accent); color: #001; }
+
+/* ---- Lyrics / stdout ---- */
+.lyrics { flex: 1 1 auto; }
+.stdout {
+  flex: 1 1 auto;
+  font-size: 12.5px; line-height: 1.55;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--cmd-fg);
+}
+.stdout .ok { color: var(--cmd-green); }
+.stdout .warn { color: var(--cmd-yellow); }
+.stdout .err { color: #ff5555; }
+.stdout .echo { color: var(--cmd-accent); }
+.stdout::-webkit-scrollbar { width: 8px; }
+.stdout::-webkit-scrollbar-thumb { background: var(--cmd-dim); }
+
+/* ---- Command ---- */
+.command { flex: 0 0 auto; }
+.cmd-line { display: flex; align-items: center; gap: 6px; }
+.prompt { color: var(--cmd-green); font-size: 13px; white-space: nowrap; }
+#cmdInput {
+  flex: 1 1 auto;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--cmd-bright);
+  font-family: var(--mono);
+  font-size: 13px;
+  caret-color: var(--cmd-green);
+}
+
+/* ---- Spectrum ---- */
+/* 不再与歌单平分空间：固定紧凑高度，剩余全部让给 PLAYLIST */
+.spectrum { flex: 0 0 auto; }
+#specCanvas {
+  width: 100%; height: 120px; flex: 0 0 auto; min-height: 0;
+  background: rgba(var(--cmd-bg-rgb), 0.7);
+  border: 1px solid var(--cmd-dim);
+  display: block;
+  image-rendering: pixelated;
+}
+
+/* ---- Audio / System ---- */
+.audio { flex: 0 0 auto; }
+.kv { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 14px; font-size: 12px; }
+.kv b { color: var(--cmd-bright); }
+.bars { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
+.bar-row { display: flex; align-items: center; gap: 8px; font-size: 11px; }
+.bar-row .dim { width: 30px; }
+.meter { flex: 1; height: 9px; background: rgba(var(--cmd-bg-rgb), 0.8); border: 1px solid var(--cmd-dim); overflow: hidden; }
+.meter i { display: block; height: 100%; width: 0%; background: var(--cmd-accent); transition: width .3s linear; }
+
+/* ---- Playlist ---- */
+.playlist { flex: 1 1 auto; }
+.pl-list { flex: 1 1 auto; overflow-y: auto; font-size: 12.5px; }
+.pl-list .row {
+  display: flex; gap: 8px; padding: 2px 4px; align-items: baseline;
+  cursor: pointer;
+}
+.pl-list .row:hover { background: rgba(var(--cmd-bg-rgb), 0.85); }
+.pl-list .row .idx { color: var(--cmd-dim); width: 22px; text-align: right; }
+.pl-list .row .name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pl-list .row .dur { color: var(--cmd-dim); }
+.pl-list .row.cur { color: var(--cmd-green); }
+.pl-list .row.cur .idx { color: var(--cmd-green); }
+.pl-list::-webkit-scrollbar { width: 8px; }
+.pl-list::-webkit-scrollbar-thumb { background: var(--cmd-dim); }
+
+/* ---- Progress ---- */
+.progress {
+  flex: 0 0 auto;
+  display: flex; align-items: center; gap: 10px;
+  border-top: 1px solid var(--cmd-dim);
+  padding-top: 6px;
+  font-size: 12px;
+}
+.t-cur, .t-tot { color: var(--cmd-bright); width: 46px; }
+.prog {
+  position: relative; flex: 1 1 auto; height: 12px;
+  background: rgba(var(--cmd-bg-rgb), 0.8);
+  border: 1px solid var(--cmd-dim);
+  overflow: hidden;
+}
+/* 进度填充用 transform: scaleX 做 GPU 位移，避免逐帧改 width 抖动 */
+.prog-fill {
+  position: absolute; left: 0; top: 0; bottom: 0; width: 100%;
+  transform-origin: left center;
+  transform: scaleX(0);
+  background: var(--cmd-accent);
+}
+.prog-handle {
+  position: absolute; top: -1px; bottom: -1px; width: 3px;
+  background: var(--cmd-bright);
+  transform: translateX(0);
+  will-change: transform;
+}
+.fmt { margin-left: 4px; }
+.mode-tag { color: var(--cmd-yellow); white-space: nowrap; }
+
+/* ===== 设置面板 ===== */
+.settings {
+  position: fixed; top: 14px; right: 14px;
+  width: 230px;
+  background: rgba(0, 0, 40, 0.95);
+  border: 1px solid var(--cmd-accent);
+  color: #dfe;
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 10px;
+  z-index: 50;
+  display: none;
+}
+.settings.show { display: block; }
+.settings-h {
+  color: var(--cmd-accent); letter-spacing: 1px;
+  display: flex; justify-content: space-between; align-items: center;
+  border-bottom: 1px solid var(--cmd-dim); padding-bottom: 5px; margin-bottom: 8px;
+}
+.settings .x { cursor: pointer; color: var(--cmd-dim); }
+.settings label { display: flex; align-items: center; justify-content: space-between; margin: 7px 0; gap: 8px; }
+.settings input[type=color] { width: 40px; height: 22px; background: none; border: 1px solid var(--cmd-dim); }
+.settings input[type=range] { flex: 1; }
+.presets { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }
+.presets button, .set-actions button {
+  font-family: var(--mono); font-size: 11px;
+  background: rgba(40,40,90,.9); color: #cfe; border: 1px solid var(--cmd-dim);
+  padding: 4px 7px; cursor: pointer;
+}
+.presets button:hover, .set-actions button:hover { border-color: var(--cmd-accent); }
+.set-actions { display: flex; flex-direction: column; gap: 5px; margin-top: 6px; }

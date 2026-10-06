@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CMD-MUSIC // 壁纸模式预览</title>
+<style>
+  :root{
+    --bg:#0b0f17;
+    --bg2:#0d1421;
+    --panel:rgba(15,23,38,0.55);
+    --panel-border:#1e2c44;
+    --grid:rgba(60,90,140,0.10);
+    --blue:#48c9ff;
+    --blue-dim:#2a7fb8;
+    --purple:#a78bfa;
+    --green:#34d399;
+    --text:#c8d6e5;
+    --dim:#5b6b82;
+    --amber:#f4b860;
+    --mono:'Cascadia Code','Fira Code','JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{height:100%;}
+  body{
+    background:
+      linear-gradient(var(--grid) 1px,transparent 1px) 0 0/100% 28px,
+      linear-gradient(90deg,var(--grid) 1px,transparent 1px) 0 0/28px 100%,
+      radial-gradient(1200px 700px at 70% -10%,rgba(72,201,255,0.10),transparent 60%),
+      radial-gradient(900px 600px at 0% 110%,rgba(167,139,250,0.08),transparent 60%),
+      var(--bg);
+    color:var(--text);
+    font-family:var(--mono);
+    font-size:13px;
+    line-height:1.5;
+    overflow:hidden;
+    user-select:none;
+  }
+  /* 预览说明角标 */
+  .preview-tag{
+    position:fixed;top:10px;right:14px;z-index:50;
+    font-size:11px;color:var(--dim);
+    border:1px solid var(--panel-border);background:rgba(11,15,23,0.6);
+    padding:3px 9px;border-radius:3px;letter-spacing:.5px;
+  }
+  .app{
+    height:100vh;padding:14px;display:grid;
+    grid-template-columns:1.45fr 1fr;
+    grid-template-rows:auto 1fr auto;
+    gap:12px;
+  }
+  header{
+    grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;
+    padding:8px 14px;border:1px solid var(--panel-border);
+    background:linear-gradient(180deg,rgba(20,30,48,0.7),rgba(12,18,30,0.5));
+    border-radius:4px;
+  }
+  .brand{font-weight:700;letter-spacing:2px;color:var(--blue);text-shadow:0 0 12px rgba(72,201,255,.45);}
+  .brand .v{color:var(--dim);font-weight:400;letter-spacing:1px;margin-left:8px;font-size:11px;}
+  .sys{display:flex;gap:18px;color:var(--dim);font-size:11px;}
+  .sys b{color:var(--text);font-weight:400;}
+  .col{display:flex;flex-direction:column;gap:12px;min-height:0;}
+  .panel{
+    border:1px solid var(--panel-border);border-radius:4px;
+    background:var(--panel);
+    padding:12px 14px;position:relative;
+    backdrop-filter:blur(2px);
+  }
+  .panel h2{
+    font-size:11px;font-weight:700;letter-spacing:2px;color:var(--blue-dim);
+    text-transform:uppercase;margin-bottom:8px;display:flex;align-items:center;gap:8px;
+  }
+  .panel h2::before{content:"▍";color:var(--blue);}
+
+  /* Player */
+  #player{flex:0 0 auto;}
+  .now-title{font-size:26px;font-weight:700;color:#eaf3ff;letter-spacing:1px;text-shadow:0 0 18px rgba(72,201,255,.35);}
+  .now-sub{color:var(--dim);font-size:12px;margin-top:2px;}
+  .now-sub .src{color:var(--purple);}
+  .now-state{display:flex;align-items:center;gap:10px;margin-top:10px;font-size:12px;}
+  .badge{color:var(--green);border:1px solid rgba(52,211,153,.4);padding:1px 8px;border-radius:3px;letter-spacing:1px;}
+  .badge.play{background:rgba(52,211,153,.08);}
+  .params{color:var(--dim);}
+  .params b{color:var(--text);font-weight:400;}
+  .wave-wrap{margin-top:12px;border:1px solid var(--panel-border);border-radius:3px;background:rgba(8,12,20,.5);height:64px;overflow:hidden;}
+  .time-row{display:flex;justify-content:space-between;color:var(--dim);font-size:11px;margin-top:6px;}
+
+  /* Lyrics / stdout */
+  #lyrics{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;}
+  .term{flex:1;overflow:hidden;font-size:12px;}
+  .term .line{white-space:pre-wrap;word-break:break-word;}
+  .c-blue{color:var(--blue);}
+  .c-green{color:var(--green);}
+  .c-purple{color:var(--purple);}
+  .c-dim{color:var(--dim);}
+  .c-amber{color:var(--amber);}
+  .lyric{color:#dbe7f5;margin-top:6px;}
+  .lyric .en{color:var(--dim);font-size:11px;}
+
+  /* Command */
+  #command{flex:0 0 auto;}
+  .cmd-line{display:flex;align-items:center;gap:8px;font-size:13px;}
+  .prompt{color:var(--green);}
+  .cmd-input{color:#eaf3ff;flex:1;}
+  .cursor{display:inline-block;width:8px;height:15px;background:var(--blue);margin-left:1px;animation:blink 1s steps(1) infinite;box-shadow:0 0 8px rgba(72,201,255,.6);}
+  @keyframes blink{50%{opacity:0;}}
+  .cmd-hint{color:var(--dim);font-size:11px;margin-top:8px;}
+
+  /* Spectrum */
+  #spectrum{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;}
+  .spectrum-canvas{width:100%;flex:1;min-height:90px;border:1px solid var(--panel-border);border-radius:3px;background:rgba(8,12,20,.5);}
+
+  /* Audio / System */
+  #audio{flex:0 0 auto;}
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;font-size:12px;}
+  .kv .k{color:var(--dim);}
+  .kv .val{color:var(--text);}
+  .meter{height:6px;border-radius:3px;background:rgba(255,255,255,.06);overflow:hidden;margin-top:3px;}
+  .meter > i{display:block;height:100%;background:linear-gradient(90deg,var(--blue),var(--purple));}
+
+  /* Playlist */
+  #playlist{flex:0 0 auto;}
+  .pl{font-size:12px;}
+  .pl .row{display:flex;align-items:center;gap:8px;padding:2px 0;}
+  .pl .idx{color:var(--dim);width:22px;text-align:right;}
+  .pl .name{flex:1;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .pl .dur{color:var(--dim);}
+  .pl .row.cur .mark{color:var(--green);}
+  .pl .row.cur .name{color:#eaf3ff;}
+  .pl .row.cur{background:rgba(52,211,153,.06);}
+  .pl-foot{display:flex;gap:14px;margin-top:8px;color:var(--dim);font-size:11px;}
+  .pl-foot .on{color:var(--blue);}
+
+  /* Progress footer */
+  footer{
+    grid-column:1/-1;border:1px solid var(--panel-border);border-radius:4px;
+    background:linear-gradient(180deg,rgba(12,18,30,0.5),rgba(20,30,48,0.7));
+    padding:10px 14px;display:flex;align-items:center;gap:14px;
+  }
+  .prog{flex:1;height:8px;border-radius:4px;background:rgba(255,255,255,.06);overflow:hidden;position:relative;}
+  .prog > i{position:absolute;left:0;top:0;height:100%;width:38%;background:linear-gradient(90deg,var(--blue-dim),var(--blue));box-shadow:0 0 10px rgba(72,201,255,.5);}
+  .prog .knob{position:absolute;left:38%;top:50%;transform:translate(-50%,-50%);width:10px;height:10px;border-radius:50%;background:#eaf3ff;box-shadow:0 0 8px rgba(72,201,255,.8);}
+  .t{color:var(--text);font-size:12px;white-space:nowrap;}
+  .t .tot{color:var(--dim);}
+  .fmt{color:var(--dim);font-size:11px;white-space:nowrap;}
+  .hot{color:var(--dim);font-size:11px;white-space:nowrap;}
+  .hot b{color:var(--blue-dim);font-weight:400;}
+  .mode-pill{color:var(--purple);border:1px solid rgba(167,139,250,.4);padding:1px 8px;border-radius:3px;font-size:11px;white-space:nowrap;}
+</style>
+</head>
+<body>
+  <div class="preview-tag">PREVIEW · 壁纸模式（正常窗口浮于其上，互不遮挡）</div>
+  <div class="app">
+    <header>
+      <div class="brand">CMD-MUSIC<span class="v">// terminal audio player v0.1</span></div>
+      <div class="sys">
+        <span>FPS <b id="fps">60</b></span>
+        <span>CPU <b id="cpu">7%</b></span>
+        <span>GPU <b id="gpu">3%</b></span>
+        <span>RAM <b id="ram">412M</b></span>
+      </div>
+    </header>
+
+    <!-- 左列 -->
+    <div class="col">
+      <section class="panel" id="player">
+        <h2>Now Playing</h2>
+        <div class="now-title">Ping 127.0.0.1</div>
+        <div class="now-sub">source: <span class="src">localhost · lo-fi</span></div>
+        <div class="now-state">
+          <span class="badge play">▶ PLAYING</span>
+          <span class="params">track <b>sft-step-0089</b></span>
+          <span class="params"><b>44.1kHz</b> · <b>16bit</b> · <b>stereo</b></span>
+        </div>
+        <div class="wave-wrap"><canvas id="wave"></canvas></div>
+        <div class="time-row"><span id="cur">01:24</span><span id="left">-03:11</span></div>
+      </section>
+
+      <section class="panel" id="lyrics">
+        <h2>Lyrics / stdout</h2>
+        <div class="term" id="term"></div>
+      </section>
+
+      <section class="panel" id="command">
+        <h2>Command</h2>
+        <div class="cmd-line">
+          <span class="prompt">user@localhost:~$</span>
+          <span class="cmd-input">play --next</span><span class="cursor"></span>
+        </div>
+        <div class="cmd-hint">↑↓ 浏览历史 · 输入 <span class="c-blue">help</span> / <span class="c-blue">play</span> / <span class="c-blue">pause</span> / <span class="c-blue">vol</span> / <span class="c-blue">shuffle</span></div>
+      </section>
+    </div>
+
+    <!-- 右列 -->
+    <div class="col">
+      <section class="panel" id="spectrum">
+        <h2>Spectrum</h2>
+        <canvas class="spectrum-canvas" id="spec"></canvas>
+      </section>
+
+      <section class="panel" id="audio">
+        <h2>Audio / System</h2>
+        <div class="kv">
+          <span class="k">codec</span><span class="val">FLAC · 0xFLAC</span>
+          <span class="k">sample</span><span class="val">44100 Hz</span>
+          <span class="k">bit</span><span class="val">16 bit</span>
+          <span class="k">channel</span><span class="val">2 (stereo)</span>
+          <span class="k">bitrate</span><span class="val">~920 kbps</span>
+          <span class="k">cpu</span><span class="val">7%</span>
+          <span class="k"></span><span class="meter"><i style="width:7%"></i></span>
+          <span class="k">gpu</span><span class="val">3%</span>
+          <span class="k"></span><span class="meter"><i style="width:3%"></i></span>
+          <span class="k">ram</span><span class="val">412M</span>
+          <span class="k"></span><span class="meter"><i style="width:22%"></i></span>
+        </div>
+      </section>
+
+      <section class="panel" id="playlist">
+        <h2>Playlist</h2>
+        <div class="pl" id="pl"></div>
+        <div class="pl-foot">
+          <span class="on">[LOOP ALL]</span>
+          <span>[SHUFFLE]</span>
+          <span>14 tracks</span>
+        </div>
+      </section>
+    </div>
+
+    <!-- 底部进度 -->
+    <footer>
+      <span class="mode-pill">◧ WALLPAPER</span>
+      <span class="t"><span id="fcur">01:24</span> / <span class="tot">04:35</span></span>
+      <div class="prog"><i></i><span class="knob"></span></div>
+      <span class="fmt">FLAC · 44.1k/16b</span>
+      <span class="hot"><b>Ctrl+Alt+W</b> 切换模式 · <b>Space</b> 播放/暂停 · <b>N/P</b> 切歌</span>
+    </footer>
+  </div>
+
+<script>
+// ---------- 模拟数据 ----------
+const tracks = [
+  ["Ping 127.0.0.1","04:35",true],
+  ["grep -r memories","03:52",false],
+  ["sudo relax --now","05:11",false],
+  ["404 (not found love)","03:18",false],
+  ["kernel panic lullaby","06:02",false],
+  ["tcpdump dreams","04:27",false],
+  ["chmod +x hope","03:40",false],
+];
+const pl = document.getElementById('pl');
+pl.innerHTML = tracks.map(([n,d,cur],i)=>
+  `<div class="row ${cur?'cur':''}"><span class="idx">${String(i+1).padStart(2,'0')}</span>`+
+  `<span class="mark">${cur?'▶':'·'}</span><span class="name">${n}</span><span class="dur">${d}</span></div>`
+).join('');
+
+// ---------- 终端日志（Lyrics/stdout）----------
+const term = document.getElementById('term');
+const logLines = [
+  '<span class="c-dim">$</span> <span class="c-blue">play</span> --track "Ping 127.0.0.1"',
+  '<span class="c-green">▶ loaded</span>  flac @ 44.1kHz/16bit/stereo',
+  '<span class="c-dim">reply from</span> 127.0.0.1: <span class="c-purple">seq=0089</span> time=12.3ms ttl=64',
+  '<span class="c-dim">stdout ▸</span> buffering 4096 frames ... <span class="c-green">ok</span>',
+  '<span class="lyric">月光穿过路由器的指示灯</span>',
+  '<span class="lyric en">moonlight through the router\'s LED</span>',
+  '<span class="c-dim">reply from</span> 127.0.0.1: <span class="c-purple">seq=0090</span> time=11.9ms ttl=64',
+  '<span class="lyric">我把心跳设成了循环播放</span>',
+  '<span class="lyric en">set my heartbeat to loop all</span>',
+];
+let li=0;
+function pushLog(){
+  const d=document.createElement('div');
+  d.className='line';d.innerHTML=logLines[li%logLines.length];
+  term.appendChild(d);
+  while(term.childNodes.length>9) term.removeChild(term.firstChild);
+  term.scrollTop=term.scrollHeight;
+  li++;
+}
+for(let i=0;i<7;i++) pushLog();
+setInterval(pushLog,1400);
+
+// ---------- 频谱 ----------
+const spec=document.getElementById('spec'), sctx=spec.getContext('2d');
+function sizeCanvas(c){const r=c.getBoundingClientRect();c.width=r.width*devicePixelRatio;c.height=r.height*devicePixelRatio;}
+function drawSpec(){
+  sizeCanvas(spec);
+  const w=spec.width,h=spec.height,n=48;
+  sctx.clearRect(0,0,w,h);
+  const bw=w/n;
+  for(let i=0;i<n;i++){
+    const t=performance.now()/600;
+    const v=Math.abs(Math.sin(i*0.35+t))*0.6+Math.abs(Math.sin(i*0.13+t*1.3))*0.4;
+    const bh=Math.max(2,(v*0.9+Math.random()*0.08)*h);
+    const x=i*bw;
+    const grad=sctx.createLinearGradient(0,h,0,h-bh);
+    grad.addColorStop(0,'#2a7fb8');grad.addColorStop(1,'#48c9ff');
+    sctx.fillStyle=grad;
+    sctx.fillRect(x+1,h-bh,bw-2,bh);
+  }
+  requestAnimationFrame(drawSpec);
+}
+drawSpec();
+
+// ---------- 波形 ----------
+const wave=document.getElementById('wave'), wctx=wave.getContext('2d');
+function drawWave(){
+  sizeCanvas(wave);
+  const w=wave.width,h=wave.height;
+  wctx.clearRect(0,0,w,h);
+  wctx.strokeStyle='rgba(72,201,255,0.85)';wctx.lineWidth=1.4;
+  wctx.beginPath();
+  const t=performance.now()/300;
+  for(let x=0;x<w;x+=2){
+    const nx=x/w;
+    const y=h/2 + Math.sin(nx*40+t)*Math.sin(nx*7+t*0.5)*h*0.32*(0.4+0.6*Math.sin(nx*Math.PI));
+    x===0?wctx.moveTo(x,y):wctx.lineTo(x,y);
+  }
+  wctx.stroke();
+  requestAnimationFrame(drawWave);
+}
+drawWave();
+
+// ---------- 系统指标微动 ----------
+setInterval(()=>{
+  const c=5+Math.round(Math.random()*5);
+  document.getElementById('cpu').textContent=c+'%';
+  document.getElementById('gpu').textContent=(2+Math.round(Math.random()*3))+'%';
+  document.getElementById('fps').textContent=58+Math.round(Math.random()*3);
+},1200);
+
+// ---------- 进度推进（演示）----------
+let prog=38;
+setInterval(()=>{prog=(prog+0.15)%100;document.querySelector('.prog > i').style.width=prog+'%';document.querySelector('.knob').style.left=prog+'%';},1000);
+</script>
+</body>
+</html>

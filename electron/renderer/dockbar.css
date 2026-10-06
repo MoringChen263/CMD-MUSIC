@@ -1,0 +1,113 @@
+/* ============================================================
+   dockbar.css — 壁纸态浮动控制条
+   风格沿用经典 CMD：等宽字体、深蓝半透明底、#c0c0c0 系立体边框。
+   但因为它浮在【任意的桌面壁纸】上（可能很亮也可能很暗），所以：
+     - 外层用半透明深色底 + 细亮边框 + 圆角，保证两种桌面下都读得出轮廓
+     - 文字/图标统一用高对比浅色，不依赖底色深浅
+   拖动：.dock 整体是 drag 区，交互控件在下面逐个标 no-drag 覆盖回来。
+   ============================================================ */
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0; padding: 0; height: 100%;
+  background: transparent;                 /* 窗口本身透明，形状由 .dock 决定 */
+  font-family: "Consolas", "Courier New", monospace;
+  overflow: hidden;
+  /* 拖动时不要选中文本 */
+  user-select: none; -webkit-user-select: none;
+  cursor: default;
+}
+
+.dock {
+  height: 100%;
+  display: flex; align-items: center; gap: 6px;
+  padding: 0 10px;
+  border-radius: 8px;
+  /* 半透明深底：浅色壁纸上压得住，深色壁纸上不突兀 */
+  background: rgba(0, 8, 40, 0.82);
+  border: 1px solid rgba(192, 192, 192, 0.85);
+  /* CMD 立体感：左上提亮、右下压暗 */
+  box-shadow:
+    inset 1px 1px 0 rgba(255, 255, 255, 0.35),
+    inset -1px -1px 0 rgba(0, 0, 0, 0.55),
+    0 4px 14px rgba(0, 0, 0, 0.45);
+  -webkit-app-region: drag;               /* 空白处按住即可拖走整条 */
+}
+
+/* ---------- 按钮 ---------- */
+.tbtn {
+  -webkit-app-region: no-drag;             /* 覆盖 .dock 的 drag，按钮才可点 */
+  flex: 0 0 auto;
+  width: 30px; height: 30px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; line-height: 1;
+  font-family: inherit;
+  color: #e8e8e8;
+  background: rgba(40, 40, 90, 0.85);
+  border: 1px solid #9a9ad6;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 0;
+  /* key: 显式 appearance:none，否则系统默认按钮样式会盖掉 CMD 味 */
+  -webkit-appearance: none; appearance: none;
+}
+.tbtn:hover { border-color: #66ccff; color: #fff; background: rgba(60, 60, 130, 0.9); }
+.tbtn:active {
+  /* 按下 = 凹陷，经典立体按钮反馈 */
+  box-shadow: inset 1px 1px 0 rgba(0, 0, 0, 0.6);
+  background: rgba(20, 20, 60, 0.95);
+}
+.tbtn.play { color: #33ff66; font-size: 16px; }
+.tbtn.play.playing { color: #ffd633; }
+
+/* ---------- 音量 ---------- */
+.volwrap {
+  -webkit-app-region: no-drag;             /* 滑块周围要能点/拖，不能被 dock 的 drag 吃掉 */
+  flex: 0 0 auto;
+  display: flex; align-items: center; gap: 4px;
+}
+.vico { color: #9a9ad6; font-size: 11px; }
+
+.vol {
+  -webkit-appearance: none; appearance: none;
+  -webkit-app-region: no-drag;
+  width: 72px; height: 12px;
+  background: transparent;
+  cursor: pointer;
+  margin: 0;
+}
+.vol::-webkit-slider-runnable-track {
+  height: 6px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid #9a9ad6;
+  border-radius: 3px;
+}
+.vol::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 10px; height: 14px;
+  margin-top: -5px;                        /* 居中于 6px 轨道 */
+  background: #c0c0c0;
+  border: 1px solid #000;
+  border-radius: 2px;
+  box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 #808080;
+}
+.vol:hover::-webkit-slider-thumb { background: #66ccff; }
+
+/* ---------- 曲名 ---------- */
+.meta {
+  -webkit-app-region: drag;                /* 曲名区留作拖动把手 */
+  flex: 1 1 auto;
+  min-width: 0;                            /* 关键：允许 flex 子项收缩，ellipsis 才生效 */
+  overflow: hidden;
+  line-height: 1.25;
+}
+.title {
+  font-size: 12px;
+  color: #fff;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.sub {
+  font-size: 10px;
+  color: #9a9ad6;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}

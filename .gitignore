@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+dist_build/
+dist-slides/
+artifacts/
+.temp-build/
+.temp-test/
+
+# WorkBuddy local memory
+.workbuddy/
+
+# Logs / temp
+*.log
+probe_boot.log
+_wtest.txt
+
+# Media files
+*.mp3
+*.mp4
+*.wav
+*.flac
+*.ogg
+*.m4a
+*.aac
+
+# Release zips / portable builds
+CMD-MUSIC-*.zip
+CMD-MUSIC-0.2.0-portable/
+CMD-MUSIC-0.2.0-portable1/
+_release/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini

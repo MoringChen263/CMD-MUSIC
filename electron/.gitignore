@@ -1,0 +1,28 @@
+# 依赖
+node_modules/
+
+# 构建产物
+dist/
+dist_build/
+*.exe
+*.dmg
+*.AppImage
+*.snap
+
+# 日志与诊断（运行时生成）
+*.log
+cmdmusic_crash.log
+cmdmusic_wallpaper_diag.txt
+
+# 调试 / 探针脚本（开发期排查用，非应用运行所需）
+probe_*
+*_result.json
+*_result.txt
+*.bat
+_wtest.txt
+
+# 系统 / 编辑器
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
